@@ -3,23 +3,6 @@ import streamlit as st
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
 
-prierez_gram_legenda = {'Čitateľská a vizuálna gramotnosť': ':book::eye:',
-                'Digitálna gramotnosť': ':computer:',
-                'Finančná gramotnosť': ':chart_with_upwards_trend:',
-                'Občianska gramotnosť': ':woman-raising-hand::iphone::earth_africa:',  # mediálna a interkultúrna
-                'Environmentálna gramotnosť': ':seedling:',
-                'Sociálna a emocionálna gramotnosť': ':people_holding_hands:'}
-
-@st.cache_data()
-def get_legenda_gramotnost():
-    text = "<br>Čitateľská a vizuálna gramotnosť <span title='Čitateľská gramotnosť'>:book:</span><span title='Vizuálna gramotnosť'>:eye:</span><br>" \
-        "Digitálna gramotnosť <span title='Digitálna gramotnosť'>:computer:</span><br>" \
-        "Finančná gramotnosť <span title='Finančná gramotnosť'>:chart_with_upwards_trend:</span><br>" \
-        "Občianska gramotnosť (občianska <span title='Občianska gramotnosť'>:woman-raising-hand:</span>, mediálna <span title='Mediálna gramotnosť'>:iphone:</span>, interkultúrna <span title='Interkultúrna gramotnosť'>:earth_africa:</span>)<br>" \
-        "Environmentálna gramotnosť <span title='Environmentálna gramotnosť'>:seedling:</span><br>" \
-        "Sociálna a emocionálna gramotnosť <span title='Sociálna a emocionálna gramotnosť'>:people_holding_hands:</span><br>"
-    return text
-
 
 def vloz_id(df):
     """Vloží za definíciu ikonku s emoji pre prierezovu gramotnost"""
@@ -168,6 +151,8 @@ tabs_cykly_cj = {'1. cyklus (r.1-3)': 1, '2. cyklus (r.4-5)': 2, '3. cyklus - pr
 # link = 'https://www.minedu.sk/data/files/11808_statny-vzdelavaci-program-pre-zakladne-vzdelavanie-cely.pdf'
 # st.sidebar.markdown(f'# <a style="text-decoration: none; color: #004280;" href={link}>Digitálna verzia štátneho vzdelávacieho programu 2023</a>', unsafe_allow_html=True)
 
+if st.sidebar.button("Clear cache"):
+    st.cache_data.clear()
 
 # Výber vzdelávacej oblasti
 vo = st.sidebar.selectbox('Vzdelávacia oblasť', vos)
