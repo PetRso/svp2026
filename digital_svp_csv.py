@@ -34,7 +34,7 @@ def load_standardy():
     """Nahrá SVP v strukturovanej podobne"""
 
     csv_url = (
-        f"https://docs.google.com/spreadsheets/d/{st.secrets["sheet_id"]}/export?format=csv"
+        f"https://docs.google.com/spreadsheets/d/{st.secrets['sheet_id']}/export?format=csv"
     )
 
     df = pd.read_csv(csv_url)
