@@ -139,8 +139,8 @@ predmety_kody = {'Slovenský jazyk a literatúra': 'sk',
                  'Náboženstvo Rímskokatolíckej cirkvi': 'rk',
                  'Náboženstvo Evanjelickej cirkvi a. v.': 'ev'}
 
-predmety_vykony_pod_cielmi = ['Človek a príroda', 'Informatika', 'Človek a spoločnosť']
-predmet_bez_delenia_obsah_standardov = ['Hudobná výchova', 'Výtvarná výchova', 'Zdravie a pohyb', 'Matematika'] + nabozenstva
+predmety_vykony_pod_cielmi = ['Človek a príroda', 'Človek a spoločnosť']
+predmet_bez_delenia_obsah_standardov = ['Hudobná výchova', 'Výtvarná výchova', 'Zdravie a pohyb', 'Informatika', 'Matematika'] + nabozenstva
 
 df = load_standardy()
 
