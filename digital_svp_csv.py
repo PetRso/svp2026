@@ -70,7 +70,7 @@ def divide_by_typ_standardu(df, ziakVie = False):
 
 def vyber_podla_predmetu(df, options):
     """Vyber standardov podla predmetov chema, fyzika alebo biologia."""
-    i_vs = df["id2"].str.contains('-v-')
+    i_vs = df["id"].str.contains('-v-')
 
     if 'Chémia' in options:
         i_ch = df.definicia.str.contains('CH')
