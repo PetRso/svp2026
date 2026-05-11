@@ -1,8 +1,5 @@
 import pandas as pd
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
-
-# !streamlit run digital_svp_csv.py
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
 
@@ -11,17 +8,6 @@ def local_css(file_name):
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 local_css("style.css")
-
-prierez_gram = {'Vizuálna gramotnosť': ':eye:',
-                'Čitateľská gramotnosť': ':book:',
-                'Digitálna gramotnosť': ':computer:',
-                'Finančná gramotnosť': ':chart_with_upwards_trend:',
-                'Občianska gramotnosť': ':woman-raising-hand:',
-                'Mediálna gramotnosť': ':iphone:',
-                'Interkultúrna gramotnosť': ':earth_africa:',
-                'Environmentálna gramotnosť': ':seedling:',
-                'Sociálna a emocionálna gramotnosť': ':people_holding_hands:'}
-
 
 prierez_gram_legenda = {'Čitateľská a vizuálna gramotnosť': ':book::eye:',
                 'Digitálna gramotnosť': ':computer:',
