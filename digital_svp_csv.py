@@ -3,12 +3,6 @@ import streamlit as st
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
 
-def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-local_css("style.css")
-
 prierez_gram_legenda = {'Čitateľská a vizuálna gramotnosť': ':book::eye:',
                 'Digitálna gramotnosť': ':computer:',
                 'Finančná gramotnosť': ':chart_with_upwards_trend:',
