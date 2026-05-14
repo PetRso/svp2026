@@ -1,280 +1,463 @@
+from html import escape
+
 import pandas as pd
 import streamlit as st
+
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
 
 
-def vloz_id(df):
-    """Vloží za definíciu ikonku s emoji pre prierezovu gramotnost"""
-    i = df["id"].str.contains('-o-') | df["id"].str.contains('-v-')  # nie v cieloch
-    # ak je odrazka v standarde, preskoci ju, aby sa zobrazila v markdown
-    df.loc[i, "definicia"] = [f"<span title='{a}'>{b}</span>" if b[0] != '-' else f"- <span title='{a}'>{b[2:]}</span>" for a,b in zip(df.loc[i, "id"], df.loc[i, "definicia"])]
+# -----------------------------
+# Konštanty
+# -----------------------------
+
+VZDELAVACIE_OBLASTI = {
+    "Jazyk a komunikácia": [
+        "Slovenský jazyk a literatúra",
+        "Jazyky národnostných menšín",
+        "Slovenský jazyk ako druhý jazyk",
+        "Cudzí jazyk",
+    ],
+    "Matematika a informatika": ["Matematika", "Informatika"],
+    "Človek a príroda": [],
+    "Človek a spoločnosť": ["Človek a spoločnosť", "Náboženstvo"],
+    "Človek a svet práce": [],
+    "Umenie a kultúra": ["Hudobná výchova", "Výtvarná výchova"],
+    "Zdravie a pohyb": [],
+}
+
+JAZYKY_NARODNOSTNE = [
+    "Maďarský jazyk a literatúra",
+    "Nemecký jazyk a literatúra",
+    "Rómsky jazyk a literatúra",
+    "Rusínsky jazyk a literatúra",
+    "Ruský jazyk a literatúra",
+    "Ukrajinský jazyk a literatúra",
+]
+
+CUDZIE_JAZYKY = [
+    "Anglický jazyk",
+    "Francúzsky jazyk",
+    "Nemecký jazyk",
+    "Ruský jazyk",
+    "Španielsky jazyk",
+    "Taliansky jazyk",
+]
+
+SLOVENCINA_AKO_DRUHY_JAZYK = [
+    "Slovenský jazyk ako druhý jazyk",
+    "Slovenský jazyk a slovenská literatúra",
+]
+
+NABOZENSTVA = [
+    "Náboženstvo Cirkvi bratskej",
+    "Náboženstvo Gréckokatolíckej cirkvi",
+    "Náboženstvo Pravoslávnej cirkvi",
+    "Náboženstvo Reformovanej kresťanskej cirkvi",
+    "Náboženstvo Rímskokatolíckej cirkvi",
+    "Náboženstvo Evanjelickej cirkvi a. v.",
+]
+
+PREDMETY_KODY = {
+    "Slovenský jazyk a literatúra": "sk",
+    "Maďarský jazyk a literatúra": "hu",
+    "Nemecký jazyk a literatúra": "de",
+    "Rómsky jazyk a literatúra": "ry",
+    "Rusínsky jazyk a literatúra": "ri",
+    "Ruský jazyk a literatúra": "ru",
+    "Ukrajinský jazyk a literatúra": "uk",
+    "Slovenský jazyk a slovenská literatúra": "sj",
+    "Slovenský jazyk ako druhý jazyk": "dj",
+    "Cudzí jazyk": "cj",
+    "Matematika": "mt",
+    "Informatika": "if",
+    "Človek a spoločnosť": "cs",
+    "Človek a príroda": "cp",
+    "Človek a svet práce": "sp",
+    "Hudobná výchova": "hv",
+    "Výtvarná výchova": "vv",
+    "Zdravie a pohyb": "zp",
+    "Náboženstvo Cirkvi bratskej": "br",
+    "Náboženstvo Gréckokatolíckej cirkvi": "gr",
+    "Náboženstvo Pravoslávnej cirkvi": "pr",
+    "Náboženstvo Reformovanej kresťanskej cirkvi": "rf",
+    "Náboženstvo Rímskokatolíckej cirkvi": "rk",
+    "Náboženstvo Evanjelickej cirkvi a. v.": "ev",
+}
+
+PREDMETY_VYKONY_POD_CIELMI = {"Človek a príroda", "Človek a spoločnosť"}
+
+PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV = {
+    "Hudobná výchova",
+    "Výtvarná výchova",
+    "Zdravie a pohyb",
+    "Informatika",
+    "Matematika",
+    *NABOZENSTVA,
+}
+
+DEFAULT_TABS_CYKLY = {
+    "1. cyklus (r. 1-3)": 1,
+    "2. cyklus (r. 4-5)": 2,
+    "3. cyklus (r. 6-9)": 3,
+}
+
+TABS_CYKLY_CUDZI_JAZYK = {
+    "1. cyklus (r.1-3)": 1,
+    "2. cyklus (r.4-5)": 2,
+    "3. cyklus - prvý jazyk (r.6-9)": 3,
+    "3. cyklus - druhý jazyk (r.6-9)": 4,
+}
+
+
+# -----------------------------
+# Pomocné funkcie
+# -----------------------------
+
+def id_contains(df: pd.DataFrame, pattern: str) -> pd.Series:
+    """Bezpečný filter pre stĺpec id."""
+    return df["id"].astype(str).str.contains(pattern, na=False, regex=False)
+
+
+def add_id_tooltips(df: pd.DataFrame) -> pd.DataFrame:
+    """Pridá k definícii HTML span s tooltipom obsahujúcim id."""
+    df = df.copy()
+
+    mask = id_contains(df, "-o-") | id_contains(df, "-v-")
+    if not mask.any():
+        return df
+
+    def format_definition(row: pd.Series) -> str:
+        item_id = escape(str(row["id"]), quote=True)
+        definition = str(row["definicia"])
+
+        if definition.startswith("- "):
+            text = escape(definition[2:])
+            return f"- <span title='{item_id}'>{text}</span>"
+
+        text = escape(definition)
+        return f"<span title='{item_id}'>{text}</span>"
+
+    df.loc[mask, "definicia"] = df.loc[mask].apply(format_definition, axis=1)
     return df
 
 
-@st.cache_data()
-def load_standardy():
-    """Nahrá SVP v strukturovanej podobne"""
+@st.cache_data(show_spinner="Načítavam štandardy...")
+def load_standardy() -> pd.DataFrame:
+    """Načíta ŠVP v štruktúrovanej podobe."""
+    sheet_id = st.secrets.get("sheet_id")
+    if not sheet_id:
+        st.error("Chýba `sheet_id` v Streamlit secrets.")
+        st.stop()
 
-    csv_url = (
-        f"https://docs.google.com/spreadsheets/d/{st.secrets['sheet_id']}/export?format=csv"
-    )
+    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
 
     df = pd.read_csv(csv_url)
+    df = df.rename(
+        columns={
+            "typ štandardu": "typ_standardu",
+            "tematický celok": "tema",
+        }
+    )
 
-    df = df.rename(columns={"typ štandardu": "typ_standardu", "tematický celok": "tema"})
-    df = df[df["definicia"].notna()]
+    required_columns = {"id", "definicia", "predmet", "cyklus", "typ_standardu", "tema", "komponent"}
+    missing = required_columns - set(df.columns)
+    if missing:
+        st.error(f"V dátach chýbajú stĺpce: {', '.join(sorted(missing))}")
+        st.stop()
+
+    df = df[df["definicia"].notna()].copy()
+    df["id"] = df["id"].astype(str)
+    df["definicia"] = df["definicia"].astype(str)
+
     return df
 
 
-def standardy_as_items(standardy):
-    """Zobrazí štandardy ako odrážky alebo ako samostatnú vetu."""
-    # uvodny a stadardy s jednou vetou zacinaju velkym pismenom
-    # štandardy ako odrážky
-    text = ''
-    if standardy.iloc[0][0] == '1':
-        # formátovanie cielov
-        for i, text_orig in standardy.items():
-            text += f'{text_orig}\n'
-        st.markdown(text, unsafe_allow_html=True)
-    elif standardy.iloc[0][0] == '-':
-        # formátovanie výkonových štandardov
-        for i, text_orig in standardy.items():
-            text += f'{text_orig},\n'
-        # posledny bude namiesto ciarky bodka
-        text = text[:-2] + '.'
-        st.markdown(text, unsafe_allow_html=True)
-    else:
-        for i, text_orig in standardy.items():
-            st.markdown(text_orig, unsafe_allow_html=True)
+def render_standardy_as_items(standardy: pd.Series) -> None:
+    """Zobrazí štandardy vždy ako bullet pointy."""
+    standardy = standardy.dropna().astype(str)
+
+    if standardy.empty:
+        return
+
+    items = []
+
+    for item in standardy:
+        item = item.strip()
+
+        if item.startswith("-"):
+            item = item.lstrip("-").strip()
+
+        items.append(f"- {item}")
+
+    st.markdown("\n".join(items), unsafe_allow_html=True)
 
 
-def divide_by_typ_standardu(df, ziakVie = False):
-    df = vloz_id(df)
-    typy_standardov = df.typ_standardu.dropna().unique().tolist()
-    if len(typy_standardov) > 0:
-        for typ_standardu in typy_standardov:  # cinnost, pojem
-            # nezobrazuj úvod alebo neopakuj komponent
-            if typ_standardu not in ['Úvod', 'none']:
-                st.markdown(f'<p style="color: #004280;"><b>{typ_standardu}</b></p>', unsafe_allow_html=True)
-                if ziakVie:
+def render_by_typ_standardu(df: pd.DataFrame, ziak_vie: bool = False) -> None:
+    """Zobrazí štandardy rozdelené podľa typu štandardu."""
+    if df.empty:
+        return
+
+    df = add_id_tooltips(df)
+    typy_standardov = df["typ_standardu"].dropna().unique().tolist()
+
+    if typy_standardov:
+        for typ_standardu in typy_standardov:
+            if typ_standardu not in {"Úvod", "none"}:
+                st.markdown(
+                    f'<p style="color: #004280;"><b>{typ_standardu}</b></p>',
+                    unsafe_allow_html=True,
+                )
+                if ziak_vie:
                     st.markdown("<b>Žiak vie/dokáže:</b>", unsafe_allow_html=True)
-            standardy_as_items(
-                df.loc[df.typ_standardu == typ_standardu, "definicia"])
-            st.markdown('\n')
+
+            render_standardy_as_items(
+                df.loc[df["typ_standardu"] == typ_standardu, "definicia"]
+            )
+            st.markdown("\n")
     else:
-        if ziakVie:
+        if ziak_vie:
             st.markdown("<b>Žiak vie/dokáže:</b>", unsafe_allow_html=True)
-        standardy_as_items(df["definicia"])
+
+        render_standardy_as_items(df["definicia"])
 
 
-def vyber_podla_predmetu(df, options):
-    """Vyber standardov podla predmetov chema, fyzika alebo biologia."""
-    i_vs = df["id"].str.contains('-v-')
+def vyber_podla_predmetu_cap(df: pd.DataFrame, options: list[str]) -> pd.DataFrame:
+    """Vyberie štandardy pre Fyziku, Chémiu alebo Biológiu v oblasti Človek a príroda."""
+    mask_vykonove = id_contains(df, "-v-")
 
-    if 'Chémia' in options:
-        i_ch = df.definicia.str.contains('CH')
-    else:
-        i_ch = df.definicia.str.contains('xxxx')  # TODO all false
-    if 'Fyzika' in options:
-        i_f = df.definicia.str.contains('F')
-    else:
-        i_f = df.definicia.str.contains('xxxx')
-    if 'Biológia' in options:
-        i_b = df.definicia.str.contains('B')
-    else:
-        i_b = df.definicia.str.contains('xxxx')
+    subject_codes = {
+        "Chémia": r"\bCH\b",
+        "Fyzika": r"\bF\b",
+        "Biológia": r"\bB\b",
+    }
 
-    df = df[i_ch | i_b | i_f | i_vs]
+    selected_mask = pd.Series(False, index=df.index)
 
-    # aby bola aj čiarka medzi F,CH,B bola v hornom indexe
-    # musi byt aj fungoval vyber chemia, fyzika, biologia
-    return df
+    for predmet, regex in subject_codes.items():
+        if predmet in options:
+            selected_mask |= df["definicia"].astype(str).str.contains(regex, na=False, regex=True)
+
+    return df[selected_mask | mask_vykonove].copy()
 
 
-# definícia predmetov
-vos = {'Jazyk a komunikácia': ['Slovenský jazyk a literatúra', 'Jazyky národnostných menšín',
-                               'Slovenský jazyk ako druhý jazyk', 'Cudzí jazyk'],
-       'Matematika a informatika': ['Matematika', 'Informatika'],
-       'Človek a príroda': [],
-       'Človek a spoločnosť': ['Človek a spoločnosť', 'Náboženstvo'],
-       'Človek a svet práce': [],
-       'Umenie a kultúra': ['Hudobná výchova', 'Výtvarná výchova'],
-       'Zdravie a pohyb': []}
+def resolve_predmet_a_cykly(predmet: str) -> tuple[str, dict[str, int], str | None]:
+    """Vyrieši špecifické výbery predmetov v sidebare."""
+    tabs_cykly = DEFAULT_TABS_CYKLY.copy()
+    jazyk = None
 
-jazyky_narodnostne = ['Maďarský jazyk a literatúra', 'Nemecký jazyk a literatúra', 'Rómsky jazyk a literatúra',
-                      'Rusínsky jazyk a literatúra', 'Ruský jazyk a literatúra', 'Ukrajinský jazyk a literatúra']
+    if predmet == "Slovenský jazyk ako druhý jazyk":
+        predmet = st.sidebar.selectbox(
+            "Slovenský jazyk ako druhý jazyk",
+            SLOVENCINA_AKO_DRUHY_JAZYK,
+            label_visibility="collapsed",
+        )
+        if predmet == "Slovenský jazyk ako druhý jazyk":
+            tabs_cykly = {
+                "Komunikačná úroveň 1 (základná)": 1,
+                "Komunikačná úroveň 2 (rozširujúca)": 2,
+            }
 
-jazyky = ['Anglický jazyk', 'Francúzsky jazyk', 'Nemecký jazyk', 'Ruský jazyk', 'Španielsky jazyk', 'Taliansky jazyk']
+    elif predmet == "Cudzí jazyk":
+        tabs_cykly = TABS_CYKLY_CUDZI_JAZYK.copy()
+        jazyk = st.sidebar.selectbox("Jazyk", CUDZIE_JAZYKY)
 
-slj_ako_druhy_jazyk = ['Slovenský jazyk ako druhý jazyk', 'Slovenský jazyk a slovenská literatúra']
+    elif predmet == "Náboženstvo":
+        predmet = st.sidebar.selectbox(
+            "Náboženstvo",
+            NABOZENSTVA,
+            label_visibility="collapsed",
+        )
 
-nabozenstva = ['Náboženstvo Cirkvi bratskej', 'Náboženstvo Gréckokatolíckej cirkvi', 'Náboženstvo Pravoslávnej cirkvi',
-               'Náboženstvo Reformovanej kresťanskej cirkvi', 'Náboženstvo Rímskokatolíckej cirkvi',
-               'Náboženstvo Evanjelickej cirkvi a. v.']
+    elif predmet == "Jazyky národnostných menšín":
+        predmet = st.sidebar.selectbox(
+            "Jazyky národnostných menšín",
+            JAZYKY_NARODNOSTNE,
+            label_visibility="collapsed",
+        )
 
-# definícia skratiek pre id
-predmety_kody = {'Slovenský jazyk a literatúra': 'sk',
-                 'Maďarský jazyk a literatúra': 'hu',
-                 'Nemecký jazyk a literatúra': 'de',
-                 'Rómsky jazyk a literatúra': 'ry',
-                 'Rusínsky jazyk a literatúra': 'ri',
-                 'Ruský jazyk a literatúra': 'ru',
-                 'Ukrajinský jazyk a literatúra': 'uk',
-                 'Slovenský jazyk a slovenská literatúra': 'sj',
-                 'Slovenský jazyk ako druhý jazyk': 'dj',
-                 'Cudzí jazyk': 'cj',
-                 'Matematika': 'mt',
-                 'Informatika': 'if',
-                 'Človek a spoločnosť': 'cs',
-                 'Človek a príroda': 'cp',
-                 'Človek a svet práce': 'sp',
-                 'Hudobná výchova': 'hv',
-                 'Výtvarná výchova': 'vv',
-                 'Zdravie a pohyb': 'zp',
-                 'Náboženstvo Cirkvi bratskej': 'br',
-                 'Náboženstvo Gréckokatolíckej cirkvi': 'gr',
-                 'Náboženstvo Pravoslávnej cirkvi': 'pr',
-                 'Náboženstvo Reformovanej kresťanskej cirkvi': 'rf',
-                 'Náboženstvo Rímskokatolíckej cirkvi': 'rk',
-                 'Náboženstvo Evanjelickej cirkvi a. v.': 'ev'}
+    return predmet, tabs_cykly, jazyk
 
-predmety_vykony_pod_cielmi = ['Človek a príroda', 'Človek a spoločnosť']
-predmet_bez_delenia_obsah_standardov = ['Hudobná výchova', 'Výtvarná výchova', 'Zdravie a pohyb', 'Informatika', 'Matematika'] + nabozenstva
 
-df = load_standardy()
+def filter_data(df: pd.DataFrame, predmet: str, cyklus: int, jazyk: str | None) -> pd.DataFrame:
+    """Vyfiltruje dáta podľa predmetu, cyklu a prípadne cudzieho jazyka."""
+    filtered = df[
+        (df["predmet"].astype(str) == predmet)
+        & (df["cyklus"] == cyklus)
+    ].copy()
 
-cykly = [1, 2, 3]
-tabs_cykly = {'1. cyklus (r. 1-3)': 1, '2. cyklus (r. 4-5)': 2, '3. cyklus (r. 6-9)': 3}
-tabs_cykly_cj = {'1. cyklus (r.1-3)': 1, '2. cyklus (r.4-5)': 2, '3. cyklus - prvý jazyk (r.6-9)': 3, '3. cyklus - druhý jazyk (r.6-9)': 4}
+    if predmet == "Cudzí jazyk" and jazyk:
+        ine_jazyky = [j for j in CUDZIE_JAZYKY if j != jazyk]
+        filtered = filtered[~filtered["typ_standardu"].isin(ine_jazyky)].copy()
 
-# link = 'https://www.minedu.sk/data/files/11808_statny-vzdelavaci-program-pre-zakladne-vzdelavanie-cely.pdf'
-# st.sidebar.markdown(f'# <a style="text-decoration: none; color: #004280;" href={link}>Digitálna verzia štátneho vzdelávacieho programu 2023</a>', unsafe_allow_html=True)
+    return filtered
+
+
+# -----------------------------
+# Načítanie dát
+# -----------------------------
 
 if st.sidebar.button("Clear cache"):
     st.cache_data.clear()
+    st.rerun()
 
-# Výber vzdelávacej oblasti
-vo = st.sidebar.selectbox('Vzdelávacia oblasť', vos)
-if vos[vo]:
-    # Výber predmetu pre vzdelávaciu oblasť
-    predmet = st.sidebar.selectbox('Predmet', vos[vo])
+df = load_standardy()
+
+
+# -----------------------------
+# Sidebar
+# -----------------------------
+
+vzdelavacia_oblast = st.sidebar.selectbox(
+    "Vzdelávacia oblasť",
+    list(VZDELAVACIE_OBLASTI.keys()),
+)
+
+predmety = VZDELAVACIE_OBLASTI[vzdelavacia_oblast]
+
+if predmety:
+    predmet = st.sidebar.selectbox("Predmet", predmety)
 else:
-    # Vzdelávacia oblasť a predmet majú rovnaký názov
-    predmet = vo
+    predmet = vzdelavacia_oblast
 
-# špecifiká predmetov
-if predmet == 'Slovenský jazyk ako druhý jazyk':
-    predmet = st.sidebar.selectbox('Slovenský jazyk ako druhý jazyk', slj_ako_druhy_jazyk, label_visibility='collapsed')
-    if predmet == 'Slovenský jazyk ako druhý jazyk':
-        tabs_cykly = {'Komunikačná úroveň 1 (základná)': 1, 'Komunikačná úroveň 2 (rozširujúca)': 2}
-elif predmet == 'Cudzí jazyk':
-    tabs_cykly = tabs_cykly_cj
-    jazyk = st.sidebar.selectbox('Jazyk', jazyky)
-elif predmet == 'Náboženstvo':
-    predmet = st.sidebar.selectbox('Náboženstvo', nabozenstva, label_visibility='collapsed')
-elif predmet == 'Jazyky národnostných menšín':
-    predmet = st.sidebar.selectbox('Jazyky národnostných menšín', jazyky_narodnostne, label_visibility='collapsed')
+predmet, tabs_cykly, jazyk = resolve_predmet_a_cykly(predmet)
 
-# Výber cyklu
-cyklus_vyber = st.sidebar.selectbox('Cyklus', tabs_cykly.keys())
+cyklus_vyber = st.sidebar.selectbox("Cyklus", list(tabs_cykly.keys()))
 cyklus = tabs_cykly[cyklus_vyber]
 
-# Výber dát pre predmet a cyklus
-# df = df[df.index.str.contains(f'{predmety_kody[predmet]}{cyklus}')]
-df = df[(df.predmet.astype(str) == predmet) & (df.cyklus == cyklus)]
+df = filter_data(df, predmet, cyklus, jazyk)
 
-# cudzí jazyk sa delí ešte podľa cudzích jazykov
-if predmet == 'Cudzí jazyk':
-    jzk = jazyky.copy()  # aby som nemazal selectbox
-    jzk.remove(jazyk)
-    df = df[~df.typ_standardu.isin(jzk)]  # iba pre vybraný jazyk, alebo pre všetky
 
-# MAIN PANEL
-# Nadpis predmetu
-st.markdown(f'###  {predmet} - {cyklus_vyber}')
+# -----------------------------
+# Main panel
+# -----------------------------
 
-# Či sú výkonové štandardy pod cieľmi alebo nie
-if predmet in predmety_vykony_pod_cielmi:
+st.markdown(f"### {predmet} - {cyklus_vyber}")
+
+if predmet in PREDMETY_VYKONY_POD_CIELMI:
     st.markdown("#### Ciele a výkonové štandardy")
 else:
     st.markdown("#### Ciele")
 
-# Hlavný cieľ je podfarbený modrou.
-hlavny_ciel = df.loc[df['id'].astype(str).str.contains('-hc-'), "definicia"]
-if not hlavny_ciel.empty:
-    st.info(hlavny_ciel.iloc[0])  # Môže byť iba jeden hlavný cieľ.
 
-# Zoznam cieľov
-ciele = df.loc[df["id"].astype(str).str.contains("-c-"), "definicia"]
-with st.expander(f"Ciele vzdelávania"):
-    standardy_as_items(ciele)
+# Hlavný cieľ
+hlavny_ciel = df.loc[id_contains(df, "-hc-"), "definicia"]
+
+if not hlavny_ciel.empty:
+    st.info(hlavny_ciel.iloc[0])
+
+
+# Ciele vzdelávania
+ciele = df.loc[id_contains(df, "-c-"), "definicia"]
+
+with st.expander("Ciele vzdelávania"):
+    render_standardy_as_items(ciele)
+
 
 # Vzdelávacie štandardy
-if predmet in predmety_vykony_pod_cielmi:
-    # Vykonove standardy su zaradene pod celmi
-    with st.expander(f"Výkonové štandardy"):
-        divide_by_typ_standardu(df.loc[df["id"].astype(str).str.contains("-v-")], True)
+if predmet in PREDMETY_VYKONY_POD_CIELMI:
+    with st.expander("Výkonové štandardy"):
+        render_by_typ_standardu(df.loc[id_contains(df, "-v-")], ziak_vie=True)
+
     st.markdown("\n")
     st.markdown("#### Obsahové štandardy pre komponenty")
 
-    # Úvod k obsahovému štandardu (človek a príroda) je nad témami
-    if predmet == 'Človek a príroda':
-        i_uvod_os = (df.typ_standardu == 'Úvod') & df["id"].astype(str).str.contains('-o-')
-        uvod_obsahoveho_standardu = df.loc[i_uvod_os,"definicia"]
+    if predmet == "Človek a príroda":
+        uvod_mask = (
+            (df["typ_standardu"] == "Úvod")
+            & id_contains(df, "-o-")
+        )
+        uvod_obsahoveho_standardu = df.loc[uvod_mask, "definicia"]
+
         if not uvod_obsahoveho_standardu.empty:
             st.markdown(uvod_obsahoveho_standardu.iloc[0], unsafe_allow_html=True)
+
 else:
-    # Vykonove standardy su zaradene pod komponentmi
     st.markdown("#### Vzdelávacie štandardy pre komponenty")
 
-# Rozdelenie podľa vnorených predmetov človek a príroda
-if (predmet == 'Človek a príroda') & (cyklus == 3):
-    predmety_cap = ['Fyzika', 'Chémia', 'Biológia']
-    vybrane_predmety = st.multiselect('Ktoré predmety vás zaujímajú?', predmety_cap, predmety_cap)
-    df = vyber_podla_predmetu(df, vybrane_predmety)
 
-# Výnimka pre cudzí jazyk
-if cyklus_vyber == '3. cyklus - druhý jazyk (r.6-9)':
-    st.tabs(['Komunikačné jazykové činnosti (recepcia, produkcia, interakcia)'])
-    st.info(df.loc[df.typ == 'Výkonový a obsahový štandard', 'definicia'][0])
+# Rozdelenie podľa vnorených predmetov v Človek a príroda
+if predmet == "Človek a príroda" and cyklus == 3:
+    predmety_cap = ["Fyzika", "Chémia", "Biológia"]
+    vybrane_predmety = st.multiselect(
+        "Ktoré predmety vás zaujímajú?",
+        predmety_cap,
+        default=predmety_cap,
+    )
+    df = vyber_podla_predmetu_cap(df, vybrane_predmety)
+
+
+# Výnimka pre cudzí jazyk - druhý jazyk
+if cyklus_vyber == "3. cyklus - druhý jazyk (r.6-9)":
+    st.tabs(["Komunikačné jazykové činnosti (recepcia, produkcia, interakcia)"])
+
+    druhy_jazyk_info = df.loc[
+        df["typ"] == "Výkonový a obsahový štandard",
+        "definicia",
+    ]
+
+    if not druhy_jazyk_info.empty:
+        st.info(druhy_jazyk_info.iloc[0])
+    else:
+        st.warning("Pre tento výber sa nenašiel výkonový a obsahový štandard.")
+
     st.stop()
 
-# Komponenty pre vybraný predmet a cyklus
-komponenty = df[df["id"].astype(str).str.contains('-o-')].komponent.dropna().unique().tolist()
 
-if len(komponenty) > 0:
-    tabs_komponenty = st.tabs(komponenty)
-else:
+# Komponenty
+komponenty = (
+    df.loc[id_contains(df, "-o-"), "komponent"]
+    .dropna()
+    .unique()
+    .tolist()
+)
+
+if not komponenty:
     st.error("Pre výber sa nenašli komponenty.")
     st.stop()
 
+tabs_komponenty = st.tabs(komponenty)
+
+
 for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
     with tab_komponent:
-        if not predmet in predmety_vykony_pod_cielmi:
+        if predmet not in PREDMETY_VYKONY_POD_CIELMI:
             with st.expander("Výkonové štandardy"):
-                dfy = df[(df.komponent == komponent) & df["id"].astype(str).str.contains('-v-')]
-                if dfy.empty:
-                    dfy = df[df["id"].astype(str).str.contains('-v-')]
-                divide_by_typ_standardu(dfy, True)
-            if predmet not in predmet_bez_delenia_obsah_standardov:
-                st.markdown("<h5 style='text-align: center;'>Obsahové štandardy</h5>", unsafe_allow_html=True)
+                df_vykonove = df[
+                    (df["komponent"] == komponent)
+                    & id_contains(df, "-v-")
+                ].copy()
 
-        # Obsahove standardy
-        dfy = df[(df.komponent == komponent) & df["id"].astype(str).str.contains('-o-')]
+                # Tematický celok sa používa ako typ štandardu.
+                if not df_vykonove.empty:
+                    df_vykonove["typ_standardu"] = df_vykonove["tema"].copy()
+                else:
+                    df_vykonove = df[id_contains(df, "-v-")].copy()
 
-        # Témy v obsahových štandardoch
-        temy = dfy.tema.dropna().unique().tolist()
-        if len(temy) > 0:
-            # Temy sa zobrazuju ako expander
+                render_by_typ_standardu(df_vykonove, ziak_vie=True)
+
+            if predmet not in PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV:
+                st.markdown(
+                    "<h5 style='text-align: center;'>Obsahové štandardy</h5>",
+                    unsafe_allow_html=True,
+                )
+
+        # Obsahové štandardy
+        df_obsahove = df[
+            (df["komponent"] == komponent)
+            & id_contains(df, "-o-")
+        ].copy()
+
+        temy = df_obsahove["tema"].dropna().unique().tolist()
+
+        if temy:
             for tema in temy:
-                with st.expander(f'{tema}'):
-                    dfl = dfy[dfy.tema == tema]
-                    divide_by_typ_standardu(dfl)
+                with st.expander(str(tema)):
+                    dfl = df_obsahove[df_obsahove["tema"] == tema].copy()
+                    render_by_typ_standardu(dfl)
         else:
-            # Predmet nemá témy
-            if not predmet in predmety_vykony_pod_cielmi:
+            if predmet not in PREDMETY_VYKONY_POD_CIELMI:
                 with st.expander("Obsahový štandard"):
-                    divide_by_typ_standardu(dfy)
+                    render_by_typ_standardu(df_obsahove)
             else:
-                divide_by_typ_standardu(dfy)
+                render_by_typ_standardu(df_obsahove)
