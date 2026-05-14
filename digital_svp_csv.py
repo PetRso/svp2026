@@ -5,7 +5,7 @@ import streamlit as st
 
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
-st.warrning("Pracovná verzia na účely kontroly.")
+st.warning("Pracovná verzia na účely kontroly.")
 
 # -----------------------------
 # Konštanty
