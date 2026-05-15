@@ -1,8 +1,8 @@
 from html import escape
-
 import pandas as pd
 import streamlit as st
 
+sheet_id = st.secrets.get("sheet_id")
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
 st.warning("Pracovná verzia na účely kontroly.")
@@ -145,7 +145,7 @@ def add_id_tooltips(df: pd.DataFrame) -> pd.DataFrame:
 @st.cache_data(show_spinner="Načítavam štandardy...")
 def load_standardy() -> pd.DataFrame:
     """Načíta ŠVP v štruktúrovanej podobe."""
-    sheet_id = st.secrets.get("sheet_id")
+
     if not sheet_id:
         st.error("Chýba `sheet_id` v Streamlit secrets.")
         st.stop()
