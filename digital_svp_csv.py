@@ -247,8 +247,8 @@ def resolve_predmet_a_cykly(predmet: str) -> tuple[str, dict[str, int], str | No
         )
         if predmet == "Slovenský jazyk ako druhý jazyk":
             tabs_cykly = {
-                "Komunikačná úroveň 1 (základná)": 1,
-                "Komunikačná úroveň 2 (rozširujúca)": 2,
+                "Jazyková úroveň 1 (A1)": 1,
+                "Jazyková úroveň 2 (A2)": 2,
             }
 
     elif predmet == "Cudzí jazyk":
