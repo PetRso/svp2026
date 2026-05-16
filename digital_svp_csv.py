@@ -1,11 +1,18 @@
 from html import escape
+
 import pandas as pd
 import streamlit as st
 
-sheet_id = st.secrets.get("sheet_id")
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
-st.warning("Pracovná verzia na účely kontroly.")
+st.warning("Slúži iba na kontrolu dát. Neoficiálna verzia!")
+sheet_id = st.secrets.get("sheet_id")
+
+def local_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+local_css("style.css")
 
 # -----------------------------
 # Konštanty
@@ -114,38 +121,9 @@ TABS_CYKLY_CUDZI_JAZYK = {
 # Pomocné funkcie
 # -----------------------------
 
-def id_contains(df: pd.DataFrame, pattern: str) -> pd.Series:
-    """Bezpečný filter pre stĺpec id."""
-    return df["id"].astype(str).str.contains(pattern, na=False, regex=False)
-
-
-def add_id_tooltips(df: pd.DataFrame) -> pd.DataFrame:
-    """Pridá k definícii HTML span s tooltipom obsahujúcim id."""
-    df = df.copy()
-
-    mask = id_contains(df, "-o-") | id_contains(df, "-v-")
-    if not mask.any():
-        return df
-
-    def format_definition(row: pd.Series) -> str:
-        item_id = escape(str(row["id"]), quote=True)
-        definition = str(row["definicia"])
-
-        if definition.startswith("- "):
-            text = escape(definition[2:])
-            return f"- <span title='{item_id}'>{text}</span>"
-
-        text = escape(definition)
-        return f"<span title='{item_id}'>{text}</span>"
-
-    df.loc[mask, "definicia"] = df.loc[mask].apply(format_definition, axis=1)
-    return df
-
-
 @st.cache_data(show_spinner="Načítavam štandardy...")
 def load_standardy() -> pd.DataFrame:
     """Načíta ŠVP v štruktúrovanej podobe."""
-
     if not sheet_id:
         st.error("Chýba `sheet_id` v Streamlit secrets.")
         st.stop()
@@ -170,6 +148,26 @@ def load_standardy() -> pd.DataFrame:
     df["id"] = df["id"].astype(str)
     df["definicia"] = df["definicia"].astype(str)
 
+    # zvyrazni zmenu
+    i_zmena = df["zmena"] == "doplnit"
+
+    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>🆕</span>'
+
+    # df.loc[i_zmena, "definicia"] = '<mark>' + df.loc[i_zmena, "definicia"] + '</mark>'
+
+    # pridaj tooltip
+    df["tooltip_html"] = df.apply(
+        lambda r: f'<span class="tooltip">{r["tooltip"]}<span class="tooltiptext">{r["tooltip_text"]}</span></span>',
+        axis=1
+    )
+
+    df["definicia"] = df.apply(
+        lambda row: row["definicia"].replace(row["tooltip"], row["tooltip_html"])
+        if pd.notna(row["tooltip"]) and pd.notna(row["tooltip_html"])
+        else row["definicia"],
+        axis=1
+    )
+
     return df
 
 
@@ -182,13 +180,8 @@ def render_standardy_as_items(standardy: pd.Series) -> None:
 
     items = []
 
-    for item in standardy:
-        item = item.strip()
-
-        if item.startswith("-"):
-            item = item.lstrip("-").strip()
-
-        items.append(f"- {item}")
+    standardy = standardy.str.strip().str.lstrip("-").str.strip()
+    items = "- " + standardy
 
     st.markdown("\n".join(items), unsafe_allow_html=True)
 
@@ -198,7 +191,7 @@ def render_by_typ_standardu(df: pd.DataFrame, ziak_vie: bool = False) -> None:
     if df.empty:
         return
 
-    df = add_id_tooltips(df)
+    # df = add_id_tooltips(df)
     typy_standardov = df["typ_standardu"].dropna().unique().tolist()
 
     if typy_standardov:
@@ -224,7 +217,6 @@ def render_by_typ_standardu(df: pd.DataFrame, ziak_vie: bool = False) -> None:
 
 def vyber_podla_predmetu_cap(df: pd.DataFrame, options: list[str]) -> pd.DataFrame:
     """Vyberie štandardy pre Fyziku, Chémiu alebo Biológiu v oblasti Človek a príroda."""
-    mask_vykonove = id_contains(df, "-v-")
 
     subject_codes = {
         "Chémia": r"\bCH\b",
@@ -238,7 +230,7 @@ def vyber_podla_predmetu_cap(df: pd.DataFrame, options: list[str]) -> pd.DataFra
         if predmet in options:
             selected_mask |= df["definicia"].astype(str).str.contains(regex, na=False, regex=True)
 
-    return df[selected_mask | mask_vykonove].copy()
+    return df[selected_mask | df["is_v"]].copy()
 
 
 def resolve_predmet_a_cykly(predmet: str) -> tuple[str, dict[str, int], str | None]:
@@ -327,6 +319,15 @@ cyklus = tabs_cykly[cyklus_vyber]
 
 df = filter_data(df, predmet, cyklus, jazyk)
 
+df["is_v"] = df["id"].str.contains("-v-", na=False)
+df["is_o"] = df["id"].str.contains("-o-", na=False)
+df["is_c"] = df["id"].str.contains("-c-", na=False)
+df["is_hc"] = df["id"].str.contains("-hc-", na=False)
+
+only_new = st.sidebar.checkbox("Zobraziť len zmeny0")
+
+if only_new:
+    df = df[df["zmena"] == "doplnit"]
 
 # -----------------------------
 # Main panel
@@ -341,14 +342,14 @@ else:
 
 
 # Hlavný cieľ
-hlavny_ciel = df.loc[id_contains(df, "-hc-"), "definicia"]
+hlavny_ciel = df.loc[df["is_hc"], "definicia"]
 
 if not hlavny_ciel.empty:
     st.info(hlavny_ciel.iloc[0])
 
 
 # Ciele vzdelávania
-ciele = df.loc[id_contains(df, "-c-"), "definicia"]
+ciele = df.loc[df["is_c"], "definicia"]
 
 with st.expander("Ciele vzdelávania"):
     render_standardy_as_items(ciele)
@@ -357,7 +358,7 @@ with st.expander("Ciele vzdelávania"):
 # Vzdelávacie štandardy
 if predmet in PREDMETY_VYKONY_POD_CIELMI:
     with st.expander("Výkonové štandardy"):
-        render_by_typ_standardu(df.loc[id_contains(df, "-v-")], ziak_vie=True)
+        render_by_typ_standardu(df.loc[df["is_v"]], ziak_vie=True)
 
     st.markdown("\n")
     st.markdown("#### Obsahové štandardy pre komponenty")
@@ -365,7 +366,7 @@ if predmet in PREDMETY_VYKONY_POD_CIELMI:
     if predmet == "Človek a príroda":
         uvod_mask = (
             (df["typ_standardu"] == "Úvod")
-            & id_contains(df, "-o-")
+            & df["is_o"]
         )
         uvod_obsahoveho_standardu = df.loc[uvod_mask, "definicia"]
 
@@ -406,7 +407,7 @@ if cyklus_vyber == "3. cyklus - druhý jazyk (r.6-9)":
 
 # Komponenty
 komponenty = (
-    df.loc[id_contains(df, "-o-"), "komponent"]
+    df["komponent"]
     .dropna()
     .unique()
     .tolist()
@@ -418,21 +419,20 @@ if not komponenty:
 
 tabs_komponenty = st.tabs(komponenty)
 
-
 for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
     with tab_komponent:
         if predmet not in PREDMETY_VYKONY_POD_CIELMI:
             with st.expander("Výkonové štandardy"):
                 df_vykonove = df[
                     (df["komponent"] == komponent)
-                    & id_contains(df, "-v-")
+                    & df["is_v"]
                 ].copy()
 
                 # Tematický celok sa používa ako typ štandardu.
                 if not df_vykonove.empty:
                     df_vykonove["typ_standardu"] = df_vykonove["tema"].copy()
                 else:
-                    df_vykonove = df[id_contains(df, "-v-")].copy()
+                    df_vykonove = df[df["is_v"]].copy()
 
                 render_by_typ_standardu(df_vykonove, ziak_vie=True)
 
@@ -443,10 +443,7 @@ for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
                 )
 
         # Obsahové štandardy
-        df_obsahove = df[
-            (df["komponent"] == komponent)
-            & id_contains(df, "-o-")
-        ].copy()
+        df_obsahove = df[(df["komponent"] == komponent) & df["is_o"]].copy()
 
         temy = df_obsahove["tema"].dropna().unique().tolist()
 
