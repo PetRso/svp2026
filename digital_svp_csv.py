@@ -6,6 +6,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
 st.warning("Slúži iba na kontrolu dát. Neoficiálna verzia!")
+
 sheet_id = st.secrets.get("sheet_id")
 
 def local_css(file_name):
@@ -324,7 +325,7 @@ df["is_o"] = df["id"].str.contains("-o-", na=False)
 df["is_c"] = df["id"].str.contains("-c-", na=False)
 df["is_hc"] = df["id"].str.contains("-hc-", na=False)
 
-only_new = st.sidebar.checkbox("Zobraziť len zmeny0")
+only_new = st.sidebar.checkbox("Zobraziť len zmeny")
 
 if only_new:
     df = df[df["zmena"] == "doplnit"]
