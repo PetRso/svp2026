@@ -5,8 +5,6 @@ import streamlit as st
 
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
-st.warning("Slúži iba na kontrolu dát. Neoficiálna verzia!")
-
 sheet_id = st.secrets.get("sheet_id")
 
 def local_css(file_name):
@@ -247,8 +245,8 @@ def resolve_predmet_a_cykly(predmet: str) -> tuple[str, dict[str, int], str | No
         )
         if predmet == "Slovenský jazyk ako druhý jazyk":
             tabs_cykly = {
-                "Jazyková úroveň 1 (A1)": 1,
-                "Jazyková úroveň 2 (A2)": 2,
+                "Komunikačná úroveň 1 (základná)": 1,
+                "Komunikačná úroveň 2 (rozširujúca)": 2,
             }
 
     elif predmet == "Cudzí jazyk":
@@ -377,7 +375,6 @@ if predmet in PREDMETY_VYKONY_POD_CIELMI:
 else:
     st.markdown("#### Vzdelávacie štandardy pre komponenty")
 
-
 # Rozdelenie podľa vnorených predmetov v Človek a príroda
 if predmet == "Človek a príroda" and cyklus == 3:
     predmety_cap = ["Fyzika", "Chémia", "Biológia"]
@@ -405,7 +402,6 @@ if cyklus_vyber == "3. cyklus - druhý jazyk (r.6-9)":
 
     st.stop()
 
-
 # Komponenty
 komponenty = (
     df["komponent"]
@@ -420,6 +416,7 @@ if not komponenty:
 
 tabs_komponenty = st.tabs(komponenty)
 
+
 for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
     with tab_komponent:
         if predmet not in PREDMETY_VYKONY_POD_CIELMI:
@@ -430,7 +427,7 @@ for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
                 ].copy()
 
                 # Tematický celok sa používa ako typ štandardu.
-                if not df_vykonove.empty:
+                if not df_vykonove.empty:  # TODO spravne zaradenie v tabulke
                     df_vykonove["typ_standardu"] = df_vykonove["tema"].copy()
                 else:
                     df_vykonove = df[df["is_v"]].copy()
