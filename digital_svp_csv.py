@@ -454,6 +454,6 @@ for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
         else:
             if predmet not in PREDMETY_VYKONY_POD_CIELMI:
                 with st.expander("Obsahový štandard"):
-                    render_by_typ_standardu(df_obsahove)
+                    render_by_typ_standardu((df.loc[i_obsahove]))
             else:
-                render_by_typ_standardu(df_obsahove)
+                render_by_typ_standardu((df.loc[i_obsahove]))
