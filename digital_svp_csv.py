@@ -149,11 +149,14 @@ def load_standardy() -> pd.DataFrame:
 
     # zvyrazni zmenu
     i_zmena = df["zmena"] == "doplnit"
-    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>🆕 nové</span>'
+
+    # zvyrazni zmenu
+    i_zmena = df["zmena"] == "doplnit"
+    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>✨</span>'
 
     i_zmena = df["zmena"] == "doplnit_cast"
-    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>🆕 časť</span>'
-    
+    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>🔄</span>'
+
     # pridaj tooltip
     df["tooltip_html"] = df.apply(
         lambda r: f'<span class="tooltip">{r["tooltip"]}<span class="tooltiptext">{r["tooltip_text"]}</span></span>',
@@ -326,7 +329,9 @@ df["is_hc"] = df["id"].str.contains("-hc-", na=False)
 only_new = st.sidebar.checkbox("Zobraziť len zmeny")
 
 if only_new:
-    df = df[df["zmena"] == "doplnit"]
+    df = df[df["zmena"].isin(["doplnit", "doplnit_cast"])]
+
+st.sidebar.markdown("✨ nové štandardy, 🔄 zmena štandardu")
 
 # -----------------------------
 # Main panel
@@ -419,20 +424,17 @@ tabs_komponenty = st.tabs(komponenty)
 
 for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
     with tab_komponent:
+        i_komponent = df["komponent"] == komponent
+
         if predmet not in PREDMETY_VYKONY_POD_CIELMI:
             with st.expander("Výkonové štandardy"):
-                df_vykonove = df[
-                    (df["komponent"] == komponent)
-                    & df["is_v"]
-                ].copy()
+                i_vykonove = i_komponent  & df["is_v"]
 
                 # Tematický celok sa používa ako typ štandardu.
-                if not df_vykonove.empty:  # TODO spravne zaradenie v tabulke
-                    df_vykonove["typ_standardu"] = df_vykonove["tema"].copy()
-                else:
-                    df_vykonove = df[df["is_v"]].copy()
+                if not df[i_vykonove].empty:  # TODO spravne zaradenie v tabulke
+                    df.loc[i_vykonove, "typ_standardu"] = df.loc[i_vykonove, "tema"].copy()
 
-                render_by_typ_standardu(df_vykonove, ziak_vie=True)
+                render_by_typ_standardu(df[i_vykonove], ziak_vie=True)
 
             if predmet not in PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV:
                 st.markdown(
@@ -441,15 +443,14 @@ for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
                 )
 
         # Obsahové štandardy
-        df_obsahove = df[(df["komponent"] == komponent) & df["is_o"]].copy()
+        i_obsahove = i_komponent & df["is_o"]
 
-        temy = df_obsahove["tema"].dropna().unique().tolist()
+        temy = df.loc[i_obsahove, "tema"].dropna().unique().tolist()
 
         if temy:
             for tema in temy:
                 with st.expander(str(tema)):
-                    dfl = df_obsahove[df_obsahove["tema"] == tema].copy()
-                    render_by_typ_standardu(dfl)
+                    render_by_typ_standardu(df.loc[i_obsahove & (df["tema"] == tema)])
         else:
             if predmet not in PREDMETY_VYKONY_POD_CIELMI:
                 with st.expander("Obsahový štandard"):
