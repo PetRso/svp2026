@@ -149,11 +149,11 @@ def load_standardy() -> pd.DataFrame:
 
     # zvyrazni zmenu
     i_zmena = df["zmena"] == "doplnit"
+    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>🆕 nové</span>'
 
-    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>🆕</span>'
-
-    # df.loc[i_zmena, "definicia"] = '<mark>' + df.loc[i_zmena, "definicia"] + '</mark>'
-
+    i_zmena = df["zmena"] == "doplnit_cast"
+    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>🆕 časť</span>'
+    
     # pridaj tooltip
     df["tooltip_html"] = df.apply(
         lambda r: f'<span class="tooltip">{r["tooltip"]}<span class="tooltiptext">{r["tooltip_text"]}</span></span>',
