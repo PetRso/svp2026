@@ -340,9 +340,8 @@ def tranform_to_export(df):
 # Načítanie dát
 # -----------------------------
 
-# if st.sidebar.button("Clear cache"):
-#     st.cache_data.clear()
-#     st.rerun()
+if st.sidebar.button("Clear cache"):
+    st.cache_data.clear()
 
 # -----------------------------
 # Sidebar
