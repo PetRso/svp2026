@@ -395,11 +395,13 @@ with st.sidebar:
                     """)
 
     if svp == "2023":
+        st.markdown("### Zmeny v doplnku č.5")
+        zmeny_only = st.checkbox("Zobraziť len zmeny",
+                         help='Zobrazujú sa iba zmeny zavedené dodatkom č.5 oproti verzii 2023.0.')
         st.markdown("""
-        ### Zmeny v doplnku č.5
-        🟩 ✏️ zmenený \\
-        🟥 🗑️ odstránený
-        """)
+            🟩 ✏️ zmenený \\
+            🟥 🗑️ odstránený
+            """)
 
         st.markdown("""
         ### Prierezové gramotností
