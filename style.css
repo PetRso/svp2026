@@ -45,3 +45,18 @@ footer {visibility: hidden;}
   opacity: 1;
 }
 
+.mark_new {
+    background-color: #88b3f6;
+}
+
+.mark_update {
+    background-color: #9fdaa5;
+}
+
+.mark_nochange {
+    background-color: #ffffff;
+}
+
+.mark_delete {
+    background-color: #fbeef0;
+}
