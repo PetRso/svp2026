@@ -17,6 +17,7 @@ header {visibility: hidden;}
 
 .stApp [data-testid="stToolbar"] {
     display: none;
+}
 
 .tooltip {
   position: relative;
