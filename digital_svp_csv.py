@@ -1,8 +1,7 @@
-from html import escape
-
 import pandas as pd
 import streamlit as st
-
+from rapidfuzz import fuzz
+from io import BytesIO
 
 st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
 sheet_id = st.secrets.get("sheet_id")
@@ -91,17 +90,6 @@ PREDMETY_KODY = {
     "Náboženstvo Evanjelickej cirkvi a. v.": "ev",
 }
 
-PREDMETY_VYKONY_POD_CIELMI = {"Človek a príroda", "Človek a spoločnosť"}
-
-PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV = {
-    "Hudobná výchova",
-    "Výtvarná výchova",
-    "Zdravie a pohyb",
-    "Informatika",
-    "Matematika",
-    *NABOZENSTVA,
-}
-
 DEFAULT_TABS_CYKLY = {
     "1. cyklus (r. 1-3)": 1,
     "2. cyklus (r. 4-5)": 2,
@@ -115,7 +103,6 @@ TABS_CYKLY_CUDZI_JAZYK = {
     "3. cyklus - druhý jazyk (r.6-9)": 4,
 }
 
-
 # -----------------------------
 # Pomocné funkcie
 # -----------------------------
@@ -127,7 +114,7 @@ def load_standardy() -> pd.DataFrame:
         st.error("Chýba `sheet_id` v Streamlit secrets.")
         st.stop()
 
-    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=661840704"
 
     df = pd.read_csv(csv_url)
     df = df.rename(
@@ -137,25 +124,18 @@ def load_standardy() -> pd.DataFrame:
         }
     )
 
-    required_columns = {"id", "definicia", "predmet", "cyklus", "typ_standardu", "tema", "komponent"}
-    missing = required_columns - set(df.columns)
-    if missing:
-        st.error(f"V dátach chýbajú stĺpce: {', '.join(sorted(missing))}")
-        st.stop()
-
-    df = df[df["definicia"].notna()].copy()
     df["id"] = df["id"].astype(str)
     df["definicia"] = df["definicia"].astype(str)
 
     # zvyrazni zmenu
     i_zmena = df["zmena"] == "doplnit"
 
-    # zvyrazni zmenu
+    # zvyrazni zmenu - nové štandardy sú modre, zmenené sú zelene
     i_zmena = df["zmena"] == "doplnit"
-    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>✨</span>'
+    df.loc[i_zmena, "definicia"] = "<span class='mark_new'>" + df.loc[i_zmena, "definicia"] + '</span>  🆕'
 
     i_zmena = df["zmena"] == "doplnit_cast"
-    df.loc[i_zmena, "definicia"] = df.loc[i_zmena, "definicia"] + ' <span>🔄</span>'
+    df.loc[i_zmena, "definicia"] = "<span class='mark_update'>" + df.loc[i_zmena, "definicia"] + '</span>  ✏️'
 
     # pridaj tooltip
     df["tooltip_html"] = df.apply(
@@ -173,6 +153,31 @@ def load_standardy() -> pd.DataFrame:
     return df
 
 
+@st.cache_data(show_spinner="Načítavam štandardy...")
+def load_standardy_old() -> pd.DataFrame:
+    """Načíta ŠVP v štruktúrovanej podobe."""
+    # df = pd.read_csv("standardy_old.csv", sep='\t')
+
+    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=1762149550"
+    df = pd.read_csv(csv_url)
+    df = df.rename(
+        columns={
+            "typ štandardu": "typ_standardu",
+            "tematický celok": "tema",
+        }
+    )
+
+    i_zmena = df["zmena"] == "update"
+    df.loc[i_zmena, "definicia"] = "<span class='mark_update'>" + df.loc[i_zmena, "definicia"] + '</span> ✏️'
+
+    i_zmena = df["zmena"] == "delete"
+    df.loc[i_zmena, "definicia"] = "<span class='mark_delete'>" + df.loc[i_zmena, "definicia"] + '</span> 🗑️'
+
+    df["id"] = df["id"].astype(str)
+    df["definicia"] = df["definicia"].astype(str)
+    return df
+
+
 def render_standardy_as_items(standardy: pd.Series) -> None:
     """Zobrazí štandardy vždy ako bullet pointy."""
     standardy = standardy.dropna().astype(str)
@@ -184,7 +189,6 @@ def render_standardy_as_items(standardy: pd.Series) -> None:
 
     standardy = standardy.str.strip().str.lstrip("-").str.strip()
     items = "- " + standardy
-
     st.markdown("\n".join(items), unsafe_allow_html=True)
 
 
@@ -287,37 +291,182 @@ def filter_data(df: pd.DataFrame, predmet: str, cyklus: int, jazyk: str | None) 
     return filtered
 
 
+def show_search_results(df):
+    """
+    Zobrazenie výsledkov vyhľadávania.
+
+    definicia = 'Kriticky posudzovať využitie výsledkov (vedeckého) výskumu pre človeka a spoločnosť.'
+    zaradenie = 'Výtvarná výchova | 3. cyklus | Obsahový štandard | Osobnosť | vv3-o-033'
+    """
+    for id, row in df.iterrows():
+        definicia = row.definicia.strip()
+        st.markdown(f"<b><span title='{id}'>{definicia}</span></b>",
+                    unsafe_allow_html=True)
+        zaradenie = f"{row.predmet} | {row.cyklus}. cyklus | {row.typ} | {row.komponent} | {row.tema} | {row.typ_standardu} | {id}"
+        zaradenie = zaradenie.replace("none", "")
+        zaradenie = zaradenie.replace("|  |  |","|").replace("|  |","|")
+        st.markdown(zaradenie, unsafe_allow_html=True)
+        st.markdown('---')
+
+def export_to_excel(df):
+    """Úprava excel tabuľky na export."""
+    output = BytesIO()
+    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    df.to_excel(writer, index=False, sheet_name='Sheet1')
+    workbook = writer.book
+    worksheet = writer.sheets['Sheet1']
+    format1 = workbook.add_format({'num_format': '0.00'})
+    worksheet.set_column('A:A', None, format1)
+    writer.close()
+    processed_data = output.getvalue()
+    return processed_data
+
+
+# @st.cache_data()
+def tranform_to_export(df):
+    """Vyčistí definície pre účely exportu."""
+    df = df[(df.typ_standardu != 'Úvod')]
+    df = df[(df.tema != 'Úvod')]
+    df = df[~df["id"].str.contains('-hc-')]
+    df = df.rename(columns={'typ_standardu': 'druh', 'tema':'tematicky celok', 'definicia': 'vzdelavaci standard'})
+
+    # vyber stlpcov
+    cols_to_xlsx = ['id', 'typ', 'komponent', 'tematicky celok', 'druh', 'vzdelavaci standard']
+    df = export_to_excel(df.reset_index()[cols_to_xlsx])
+    return df
+
+
 # -----------------------------
 # Načítanie dát
 # -----------------------------
 
-if st.sidebar.button("Clear cache"):
-    st.cache_data.clear()
-    st.rerun()
-
-df = load_standardy()
-
+# if st.sidebar.button("Clear cache"):
+#     st.cache_data.clear()
+#     st.rerun()
 
 # -----------------------------
 # Sidebar
 # -----------------------------
 
-vzdelavacia_oblast = st.sidebar.selectbox(
-    "Vzdelávacia oblasť",
-    list(VZDELAVACIE_OBLASTI.keys()),
-)
+# Revízia ŠVP
+with st.sidebar:
+    link = "https://www.minedu.sk/data/files/11808_statny-vzdelavaci-program-pre-zakladne-vzdelavanie-cely.pdf"
 
-predmety = VZDELAVACIE_OBLASTI[vzdelavacia_oblast]
+    st.markdown(
+        f'# <a href="{link}" style="text-decoration:none; color:#004280;">'
+        'Digitálna verzia štátneho vzdelávacieho programu 2023 pre ZŠ'
+        '</a>',
+        unsafe_allow_html=True
+    )
 
-if predmety:
-    predmet = st.sidebar.selectbox("Predmet", predmety)
-else:
-    predmet = vzdelavacia_oblast
+    # Vyhľadávanie v štandardoch
+    query = st.text_input('Vyhľadávanie v ŠVP', '', key=1,
+                          placeholder='🔍 Vyhľadaj štandard, tému alebo kľúčové slovo ...')
 
-predmet, tabs_cykly, jazyk = resolve_predmet_a_cykly(predmet)
+    # st.markdown("### Výber ŠVP")
 
-cyklus_vyber = st.sidebar.selectbox("Cyklus", list(tabs_cykly.keys()))
-cyklus = tabs_cykly[cyklus_vyber]
+    svp = st.selectbox("Verzia ŠVP", ["2023", "2023 - doplnok č.5"], index=1)
+
+    vzdelavacia_oblast = st.selectbox(
+        "Vzdelávacia oblasť",
+        list(VZDELAVACIE_OBLASTI.keys()),
+    )
+
+    predmety = VZDELAVACIE_OBLASTI[vzdelavacia_oblast]
+
+    if predmety:
+        predmet = st.selectbox("Predmet", predmety)
+    else:
+        predmet = vzdelavacia_oblast
+
+    predmet, tabs_cykly, jazyk = resolve_predmet_a_cykly(predmet)
+
+    cyklus_vyber = st.selectbox("Cyklus", list(tabs_cykly.keys()))
+    cyklus = tabs_cykly[cyklus_vyber]
+
+    if svp == '2023 - doplnok č.5':
+        st.markdown("### Zmeny voči dodatku č.5")
+        zmeny_only = st.checkbox("Zobraziť len zmeny",
+                                 help='Zobrazujú sa iba zmeny zavedené dodatkom č.5 oproti verzii 2023.0.')
+        st.markdown("""
+                    🟦 🆕 nový\\
+                    🟩 ✏️ zmenený
+                    """)
+
+    if svp == "2023":
+        st.markdown("""
+        ### Zmeny v doplnku č.5
+        🟩 ✏️ zmenený \\
+        🟥 🗑️ odstránený
+        """)
+
+        st.markdown("""
+        ### Prierezové gramotností
+
+        - 📖 🖼️ **Čitateľská a vizuálna gramotnosť**
+        - 💻 🌐 **Digitálna gramotnosť**
+        - € 📊 **Finančná gramotnosť**
+        - 🏛️ 📱 🌍 **Občianska gramotnosť**  
+          *(občianska, mediálna, interkultúrna)*
+        - 🌱 **Environmentálna gramotnosť**
+        - 🧑‍🤝‍🧑 ❤️ **Sociálna a emocionálna gramotnosť**
+        """)
+
+
+# -----------------------------
+# Main panel
+# -----------------------------
+
+if svp == '2023':
+    df = load_standardy_old()
+
+    PREDMETY_VYKONY_POD_CIELMI = {"Človek a príroda", "Človek a spoločnosť", "Informatika", "Matematika"}
+
+    PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV = {
+        "Hudobná výchova",
+        "Výtvarná výchova",
+        "Zdravie a pohyb",
+        *NABOZENSTVA,
+    }
+
+if svp == "2023 - doplnok č.5":
+    df = load_standardy()
+
+    PREDMETY_VYKONY_POD_CIELMI = {"Človek a príroda", "Človek a spoločnosť"}
+
+    PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV = {
+        "Hudobná výchova",
+        "Výtvarná výchova",
+        "Zdravie a pohyb",
+        "Informatika",
+        "Matematika",
+        *NABOZENSTVA,
+    }
+
+if query:
+    st.sidebar.warning(f'Pre návrat na ŠVP zmažte text vo vyhľadávaní.')
+    if len(query) < 3:
+        st.sidebar.warning('Hľadaný text musí mať aspoň 3 znaky')
+    else:
+        # vyhľadávanie 1:1
+        res = df[df.definicia.str.contains(query)]
+        st.sidebar.info(f'Našlo sa {len(res)} podobných záznamov')
+        show_search_results(res.head(50).fillna(''))
+        if len(res) > 50:
+            st.warning("Výsledky vyhľadávania boli skrátené na 50 záznamov.")
+
+        # fuzzy search - ak sa nájde priamou cestou viac ako 5 nájdení
+        if len(res) < 5:
+            df["res"] = [fuzz.token_set_ratio(t, query) for t in df["definicia"]]  # TODO use processes
+            df = df.sort_values("res", ascending=False)
+            res2 = df.loc[df.res > 50].fillna('')
+            res2 = res2.drop(res.index, errors='ignore')  # odstráni už vyhľadané záznamy cez exact match
+            if len(res2) > 0:
+                st.info("Výsledky vyhľadávania na základe podobnosti")
+                show_search_results(res2.head(30))
+                if len(res2) > 30:
+                    st.warning("Výsledky vyhľadávania boli skrátené na 30 záznamov.")
+    st.stop()
 
 df = filter_data(df, predmet, cyklus, jazyk)
 
@@ -326,23 +475,23 @@ df["is_o"] = df["id"].str.contains("-o-", na=False)
 df["is_c"] = df["id"].str.contains("-c-", na=False)
 df["is_hc"] = df["id"].str.contains("-hc-", na=False)
 
-only_new = st.sidebar.checkbox("Zobraziť len zmeny")
-
-if only_new:
-    df = df[df["zmena"].isin(["doplnit", "doplnit_cast"])]
-
-st.sidebar.markdown("✨ nové štandardy, 🔄 zmena štandardu")
-
-# -----------------------------
-# Main panel
-# -----------------------------
-
-st.markdown(f"### {predmet} - {cyklus_vyber}")
-
-if predmet in PREDMETY_VYKONY_POD_CIELMI:
-    st.markdown("#### Ciele a výkonové štandardy")
+if zmeny_only:
+    df = df[df["zmena"].notna()]
+    rozbal = True
 else:
-    st.markdown("#### Ciele")
+    rozbal = False
+
+col1, col2 = st.columns([6, 1])
+with col1:
+    st.title(predmet + f" {cyklus}. cyklus")
+
+if vzdelavacia_oblast == predmet:
+    st.caption(f"ŠVP {svp} · {vzdelavacia_oblast} · {cyklus}. cyklus")
+else:
+    st.caption(f"ŠVP {svp} · {vzdelavacia_oblast}")
+
+if zmeny_only:
+    st.warning("Zobrazené sú iba zmeny oproti verzii z roku 2023.")
 
 
 # Hlavný cieľ
@@ -355,14 +504,15 @@ if not hlavny_ciel.empty:
 # Ciele vzdelávania
 ciele = df.loc[df["is_c"], "definicia"]
 
-with st.expander("Ciele vzdelávania"):
-    render_standardy_as_items(ciele)
-
+if any(ciele):
+    with st.expander("Ciele vzdelávania", expanded=rozbal):
+        render_standardy_as_items(ciele)
 
 # Vzdelávacie štandardy
 if predmet in PREDMETY_VYKONY_POD_CIELMI:
-    with st.expander("Výkonové štandardy"):
-        render_by_typ_standardu(df.loc[df["is_v"]], ziak_vie=True)
+    if any(df["is_v"]):
+        with st.expander("Výkonové štandardy", expanded=rozbal):
+            render_by_typ_standardu(df.loc[df["is_v"]], ziak_vie=True)
 
     st.markdown("\n")
     st.markdown("#### Obsahové štandardy pre komponenty")
@@ -416,7 +566,7 @@ komponenty = (
 )
 
 if not komponenty:
-    st.error("Pre výber sa nenašli komponenty.")
+    st.info("Pre daný filter sa nenašli žiadne štandardy.")
     st.stop()
 
 tabs_komponenty = st.tabs(komponenty)
@@ -427,18 +577,19 @@ for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
         i_komponent = df["komponent"] == komponent
 
         if predmet not in PREDMETY_VYKONY_POD_CIELMI:
-            with st.expander("Výkonové štandardy"):
-                i_vykonove = i_komponent  & df["is_v"]
+            i_vykonove = i_komponent & df["is_v"]
+            if any(i_vykonove):
+                with st.expander("Výkonové štandardy", expanded=rozbal):
 
-                # Tematický celok sa používa ako typ štandardu.
-                if not df[i_vykonove].empty:  # TODO spravne zaradenie v tabulke
-                    df.loc[i_vykonove, "typ_standardu"] = df.loc[i_vykonove, "tema"].copy()
+                    # Tematický celok sa používa ako typ štandardu.
+                    if not df[i_vykonove].empty:  # TODO spravne zaradenie v tabulke
+                        df.loc[i_vykonove, "typ_standardu"] = df.loc[i_vykonove, "tema"].copy()
 
-                render_by_typ_standardu(df[i_vykonove], ziak_vie=True)
+                    render_by_typ_standardu(df[i_vykonove], ziak_vie=True)
 
             if predmet not in PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV:
                 st.markdown(
-                    "<h5 style='text-align: center;'>Obsahové štandardy</h5>",
+                    "<h5 style='text-align: left;'>Obsahové štandardy</h5>",
                     unsafe_allow_html=True,
                 )
 
@@ -449,11 +600,17 @@ for komponent, tab_komponent in zip(komponenty, tabs_komponenty):
 
         if temy:
             for tema in temy:
-                with st.expander(str(tema)):
+                with st.expander(str(tema), expanded=rozbal):
                     render_by_typ_standardu(df.loc[i_obsahove & (df["tema"] == tema)])
         else:
             if predmet not in PREDMETY_VYKONY_POD_CIELMI:
-                with st.expander("Obsahový štandard"):
-                    render_by_typ_standardu((df.loc[i_obsahove]))
+                if any(i_obsahove):
+                    with st.expander("Obsahový štandard", expanded=rozbal):
+                        render_by_typ_standardu(df.loc[i_obsahove])
             else:
-                render_by_typ_standardu((df.loc[i_obsahove]))
+                render_by_typ_standardu(df.loc[i_obsahove])
+
+with col2:
+    st.download_button(label='📥 Stiahnuť (xlsx)',
+                       data=tranform_to_export(df),
+                       file_name=f'standardy_{predmet}_c{cyklus}.xlsx')
