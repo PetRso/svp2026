@@ -363,7 +363,7 @@ with st.sidebar:
     query = st.text_input('Vyhľadávanie v ŠVP', '', key=1,
                           placeholder='🔍 Vyhľadaj štandard, tému alebo kľúčové slovo ...')
 
-    # st.markdown("### Výber ŠVP")
+    st.markdown('---')
 
     svp = st.selectbox("Verzia ŠVP", ["2023", "2023 - doplnok č.5"], index=1)
 
@@ -383,6 +383,8 @@ with st.sidebar:
 
     cyklus_vyber = st.selectbox("Cyklus", list(tabs_cykly.keys()))
     cyklus = tabs_cykly[cyklus_vyber]
+
+    st.markdown('---')
 
     if svp == '2023 - doplnok č.5':
         st.markdown("### Zmeny voči dodatku č.5")
