@@ -9,7 +9,6 @@ button[data-baseweb="tab"] > div[data-testid="stMarkdownContainer"] > p {
 #MainMenu {visibility: hidden;}
 
 footer {visibility: hidden;}
-header {visibility: hidden;}
 
 #GithubIcon {
   visibility: hidden;
