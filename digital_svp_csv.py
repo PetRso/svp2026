@@ -3,7 +3,12 @@ import streamlit as st
 from rapidfuzz import fuzz
 from io import BytesIO
 
-st.set_page_config(page_title="Digitálny ŠVP", page_icon=":ledger:")
+st.set_page_config(
+    page_title="Digitálny ŠVP",
+    page_icon=":ledger:",
+    initial_sidebar_state="expanded"
+)
+
 sheet_id = st.secrets.get("sheet_id")
 
 def local_css(file_name):
