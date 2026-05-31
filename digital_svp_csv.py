@@ -21,6 +21,8 @@ local_css("style.css")
 # Konštanty
 # -----------------------------
 
+ZMENY = True
+
 VZDELAVACIE_OBLASTI = {
     "Jazyk a komunikácia": [
         "Slovenský jazyk a literatúra",
@@ -136,11 +138,12 @@ def load_standardy() -> pd.DataFrame:
     i_zmena = df["zmena"] == "doplnit"
 
     # zvyrazni zmenu - nové štandardy sú modre, zmenené sú zelene
-    i_zmena = df["zmena"] == "doplnit"
-    df.loc[i_zmena, "definicia"] = "<span class='mark_new'>" + df.loc[i_zmena, "definicia"] + '</span>  🆕'
+    if ZMENY:
+        i_zmena = df["zmena"] == "doplnit"
+        df.loc[i_zmena, "definicia"] = "<span class='mark_new'>" + df.loc[i_zmena, "definicia"] + '</span>  🆕'
 
-    i_zmena = df["zmena"] == "doplnit_cast"
-    df.loc[i_zmena, "definicia"] = "<span class='mark_update'>" + df.loc[i_zmena, "definicia"] + '</span>  ✏️'
+        i_zmena = df["zmena"] == "doplnit_cast"
+        df.loc[i_zmena, "definicia"] = "<span class='mark_update'>" + df.loc[i_zmena, "definicia"] + '</span>  ✏️'
 
     # pridaj tooltip
     df["tooltip_html"] = df.apply(
@@ -172,11 +175,12 @@ def load_standardy_old() -> pd.DataFrame:
         }
     )
 
-    i_zmena = df["zmena"] == "update"
-    df.loc[i_zmena, "definicia"] = "<span class='mark_update'>" + df.loc[i_zmena, "definicia"] + '</span> ✏️'
+    if ZMENY:
+        i_zmena = df["zmena"] == "update"
+        df.loc[i_zmena, "definicia"] = "<span class='mark_update'>" + df.loc[i_zmena, "definicia"] + '</span> ✏️'
 
-    i_zmena = df["zmena"] == "delete"
-    df.loc[i_zmena, "definicia"] = "<span class='mark_delete'>" + df.loc[i_zmena, "definicia"] + '</span> 🗑️'
+        i_zmena = df["zmena"] == "delete"
+        df.loc[i_zmena, "definicia"] = "<span class='mark_delete'>" + df.loc[i_zmena, "definicia"] + '</span> 🗑️'
 
     df["id"] = df["id"].astype(str)
     df["definicia"] = df["definicia"].astype(str)
@@ -390,7 +394,9 @@ with st.sidebar:
 
     st.markdown('---')
 
-    if svp == '2023 - doplnok č.5':
+    zmeny_only = False
+
+    if (svp == '2023 - doplnok č.5') & ZMENY:
         st.markdown("### Zmeny voči dodatku č.5")
         zmeny_only = st.checkbox("Zobraziť len zmeny",
                                  help='Zobrazujú sa iba zmeny zavedené dodatkom č.5 oproti verzii 2023.0.')
@@ -400,24 +406,25 @@ with st.sidebar:
                     """)
 
     if svp == "2023":
-        st.markdown("### Zmeny v doplnku č.5")
-        zmeny_only = st.checkbox("Zobraziť len zmeny",
-                         help='Zobrazujú sa iba zmeny zavedené dodatkom č.5 oproti verzii 2023.0.')
-        st.markdown("""
-            🟩 ✏️ zmenený \\
-            🟥 🗑️ odstránený
-            """)
+        if ZMENY:
+            st.markdown("### Zmeny v doplnku č.5")
+            zmeny_only = st.checkbox("Zobraziť len zmeny",
+                             help='Zobrazujú sa iba zmeny zavedené dodatkom č.5 oproti verzii 2023.0.')
+            st.markdown("""
+                🟩 ✏️ zmenený \\
+                🟥 🗑️ odstránený
+                """)
 
         st.markdown("""
         ### Prierezové gramotností
 
-        - 📖 🖼️ **Čitateľská a vizuálna gramotnosť**
-        - 💻 🌐 **Digitálna gramotnosť**
-        - € 📊 **Finančná gramotnosť**
-        - 🏛️ 📱 🌍 **Občianska gramotnosť**  
-          *(občianska, mediálna, interkultúrna)*
-        - 🌱 **Environmentálna gramotnosť**
-        - 🧑‍🤝‍🧑 ❤️ **Sociálna a emocionálna gramotnosť**
+        - 📖 🖼️ Čitateľská a vizuálna gramotnosť
+        - 💻 🌐 Digitálna gramotnosť
+        - € 📊 Finančná gramotnosť
+        - 🏛️ 📱 🌍 Občianska gramotnosť
+          (občianska, mediálna, interkultúrna)
+        - 🌱 Environmentálna gramotnosť
+        - 🧑‍🤝‍🧑 ❤️ Sociálna a emocionálna gramotnosť
         """)
 
 
