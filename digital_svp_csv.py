@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 from rapidfuzz import fuzz
 from io import BytesIO
+import constants
 
 st.set_page_config(
     page_title="Digitálny ŠVP",
@@ -23,79 +24,6 @@ local_css("style.css")
 
 ZMENY = True
 
-VZDELAVACIE_OBLASTI = {
-    "Jazyk a komunikácia": [
-        "Slovenský jazyk a literatúra",
-        "Jazyky národnostných menšín",
-        "Slovenský jazyk ako druhý jazyk",
-        "Cudzí jazyk",
-    ],
-    "Matematika a informatika": ["Matematika", "Informatika"],
-    "Človek a príroda": [],
-    "Človek a spoločnosť": ["Človek a spoločnosť", "Náboženstvo"],
-    "Človek a svet práce": [],
-    "Umenie a kultúra": ["Hudobná výchova", "Výtvarná výchova"],
-    "Zdravie a pohyb": [],
-}
-
-JAZYKY_NARODNOSTNE = [
-    "Maďarský jazyk a literatúra",
-    "Nemecký jazyk a literatúra",
-    "Rómsky jazyk a literatúra",
-    "Rusínsky jazyk a literatúra",
-    "Ruský jazyk a literatúra",
-    "Ukrajinský jazyk a literatúra",
-]
-
-CUDZIE_JAZYKY = [
-    "Anglický jazyk",
-    "Francúzsky jazyk",
-    "Nemecký jazyk",
-    "Ruský jazyk",
-    "Španielsky jazyk",
-    "Taliansky jazyk",
-]
-
-SLOVENCINA_AKO_DRUHY_JAZYK = [
-    "Slovenský jazyk ako druhý jazyk",
-    "Slovenský jazyk a slovenská literatúra",
-]
-
-NABOZENSTVA = [
-    "Náboženstvo Cirkvi bratskej",
-    "Náboženstvo Gréckokatolíckej cirkvi",
-    "Náboženstvo Pravoslávnej cirkvi",
-    "Náboženstvo Reformovanej kresťanskej cirkvi",
-    "Náboženstvo Rímskokatolíckej cirkvi",
-    "Náboženstvo Evanjelickej cirkvi a. v.",
-]
-
-PREDMETY_KODY = {
-    "Slovenský jazyk a literatúra": "sk",
-    "Maďarský jazyk a literatúra": "hu",
-    "Nemecký jazyk a literatúra": "de",
-    "Rómsky jazyk a literatúra": "ry",
-    "Rusínsky jazyk a literatúra": "ri",
-    "Ruský jazyk a literatúra": "ru",
-    "Ukrajinský jazyk a literatúra": "uk",
-    "Slovenský jazyk a slovenská literatúra": "sj",
-    "Slovenský jazyk ako druhý jazyk": "dj",
-    "Cudzí jazyk": "cj",
-    "Matematika": "mt",
-    "Informatika": "if",
-    "Človek a spoločnosť": "cs",
-    "Človek a príroda": "cp",
-    "Človek a svet práce": "sp",
-    "Hudobná výchova": "hv",
-    "Výtvarná výchova": "vv",
-    "Zdravie a pohyb": "zp",
-    "Náboženstvo Cirkvi bratskej": "br",
-    "Náboženstvo Gréckokatolíckej cirkvi": "gr",
-    "Náboženstvo Pravoslávnej cirkvi": "pr",
-    "Náboženstvo Reformovanej kresťanskej cirkvi": "rf",
-    "Náboženstvo Rímskokatolíckej cirkvi": "rk",
-    "Náboženstvo Evanjelickej cirkvi a. v.": "ev",
-}
 
 DEFAULT_TABS_CYKLY = {
     "1. cyklus (r. 1-3)": 1,
@@ -135,14 +63,14 @@ def load_standardy() -> pd.DataFrame:
     df["definicia"] = df["definicia"].astype(str)
 
     # zvyrazni zmenu
-    i_zmena = df["zmena"] == "doplnit"
+    i_zmena = df["zmena"] == "update"
 
     # zvyrazni zmenu - nové štandardy sú modre, zmenené sú zelene
     if ZMENY:
-        i_zmena = df["zmena"] == "doplnit"
+        i_zmena = df["zmena"] == "new"
         df.loc[i_zmena, "definicia"] = "<span class='mark_new'>" + df.loc[i_zmena, "definicia"] + '</span>  🆕'
 
-        i_zmena = df["zmena"] == "doplnit_cast"
+        i_zmena = df["zmena"] == "update"
         df.loc[i_zmena, "definicia"] = "<span class='mark_update'>" + df.loc[i_zmena, "definicia"] + '</span>  ✏️'
 
     # pridaj tooltip
@@ -337,6 +265,9 @@ def tranform_to_export(df):
     df = df[(df.typ_standardu != 'Úvod')]
     df = df[(df.tema != 'Úvod')]
     df = df[~df["id"].str.contains('-hc-')]
+
+    df["definicia"] = df["definicia"].str.replace(r"<[^>]+>", "", regex=True)
+
     df = df.rename(columns={'typ_standardu': 'druh', 'tema':'tematicky celok', 'definicia': 'vzdelavaci standard'})
 
     # vyber stlpcov
@@ -362,7 +293,7 @@ with st.sidebar:
 
     st.markdown(
         f'# <a href="{link}" style="text-decoration:none; color:#004280;">'
-        'Digitálna verzia štátneho vzdelávacieho programu 2023 pre ZŠ'
+        'Digitálna verzia ŠVP 2023 pre ZŠ'
         '</a>',
         unsafe_allow_html=True
     )
@@ -373,7 +304,9 @@ with st.sidebar:
 
     st.markdown('---')
 
-    svp = st.selectbox("Verzia ŠVP", ["2023", "2023 - doplnok č.5"], index=1)
+    svp = st.selectbox("Verzia ŠVP", ["Prvá verzia", "Dodatok č.5"], index=1)
+    zmeny_only = st.checkbox("Zobraziť len zmeny",
+                             help='Zobrazia sa iba zmeny zavedené dodatkom č.5')
 
     vzdelavacia_oblast = st.selectbox(
         "Vzdelávacia oblasť",
@@ -394,37 +327,30 @@ with st.sidebar:
 
     st.markdown('---')
 
-    zmeny_only = False
+    if (svp == 'Dodatok č.5') & ZMENY:
+        st.markdown("### Zmeny")
 
-    if (svp == '2023 - doplnok č.5') & ZMENY:
-        st.markdown("### Zmeny voči dodatku č.5")
-        zmeny_only = st.checkbox("Zobraziť len zmeny",
-                                 help='Zobrazujú sa iba zmeny zavedené dodatkom č.5 oproti verzii 2023.0.')
         st.markdown("""
-                    🟦 🆕 nový\\
-                    🟩 ✏️ zmenený
+                    🟦🆕 pridané\\
+                    🟩✏️ zmenené
                     """)
 
-    if svp == "2023":
-        if ZMENY:
-            st.markdown("### Zmeny v doplnku č.5")
-            zmeny_only = st.checkbox("Zobraziť len zmeny",
-                             help='Zobrazujú sa iba zmeny zavedené dodatkom č.5 oproti verzii 2023.0.')
-            st.markdown("""
-                🟩 ✏️ zmenený \\
-                🟥 🗑️ odstránený
-                """)
+    if (svp == "Prvá verzia") & ZMENY:
+        st.markdown("### Zmeny")
+        st.markdown("""
+            🟩 ✏️ zmenené\\
+            🟥 🗑️ nahradené
+            """)
 
         st.markdown("""
         ### Prierezové gramotností
 
-        - 📖 🖼️ Čitateľská a vizuálna gramotnosť
-        - 💻 🌐 Digitálna gramotnosť
-        - € 📊 Finančná gramotnosť
-        - 🏛️ 📱 🌍 Občianska gramotnosť
-          (občianska, mediálna, interkultúrna)
-        - 🌱 Environmentálna gramotnosť
-        - 🧑‍🤝‍🧑 ❤️ Sociálna a emocionálna gramotnosť
+        Čitateľská a vizuálna gramotnosť 📖🖼️\\
+        Digitálna gramotnosť 💻🌐\\
+        Finančná gramotnosť €📊\\
+        Občianska gramotnosť (občianska 🏛️, mediálna 📱, interkultúrna 🌍)\\
+        Environmentálna gramotnosť 🌱\\
+        Sociálna a emocionálna gramotnosť 🧑‍🤝‍🧑❤️
         """)
 
 
@@ -432,7 +358,7 @@ with st.sidebar:
 # Main panel
 # -----------------------------
 
-if svp == '2023':
+if svp == 'Prvá verzia':
     df = load_standardy_old()
 
     PREDMETY_VYKONY_POD_CIELMI = {"Človek a príroda", "Človek a spoločnosť", "Informatika", "Matematika"}
@@ -444,7 +370,7 @@ if svp == '2023':
         *NABOZENSTVA,
     }
 
-if svp == "2023 - doplnok č.5":
+if svp == "Dodatok č.5":
     df = load_standardy()
 
     PREDMETY_VYKONY_POD_CIELMI = {"Človek a príroda", "Človek a spoločnosť"}
@@ -464,7 +390,7 @@ if query:
         st.sidebar.warning('Hľadaný text musí mať aspoň 3 znaky')
     else:
         # vyhľadávanie 1:1
-        res = df[df.definicia.str.contains(query)]
+        res = df[df.definicia.str.contains(query, case=False, na=False, regex=False)]
         st.sidebar.info(f'Našlo sa {len(res)} podobných záznamov')
         show_search_results(res.head(50).fillna(''))
         if len(res) > 50:
@@ -501,12 +427,12 @@ with col1:
     st.title(predmet + f" {cyklus}. cyklus")
 
 if vzdelavacia_oblast == predmet:
-    st.caption(f"ŠVP {svp} · {vzdelavacia_oblast} · {cyklus}. cyklus")
+    st.caption(f"{svp} · {vzdelavacia_oblast} · {cyklus}. cyklus")
 else:
-    st.caption(f"ŠVP {svp} · {vzdelavacia_oblast}")
+    st.caption(f"{svp} · {vzdelavacia_oblast}")
 
 if zmeny_only:
-    st.warning("Zobrazené sú iba zmeny oproti verzii z roku 2023.")
+    st.info("Zobrazené sú iba zmeny zavedené dodatkom č.5.")
 
 
 # Hlavný cieľ
