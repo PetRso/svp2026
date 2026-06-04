@@ -6,13 +6,17 @@ button[data-baseweb="tab"] > div[data-testid="stMarkdownContainer"] > p {
   font-size: 1rem;
 }
 
+[data-testid="stToolbarActions"] {
+    display: none !important;
+}
+
 #MainMenu {visibility: hidden;}
+
 footer {visibility: hidden;}
 
 #GithubIcon {
   visibility: hidden;
 }
-
 
 .tooltip {
   position: relative;
