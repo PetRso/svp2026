@@ -9,7 +9,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-sheet_id = st.secrets.get("sheet_id")
 
 def local_css(file_name):
     with open(file_name) as f:
@@ -116,11 +115,7 @@ TABS_CYKLY_CUDZI_JAZYK = {
 
 def load_standardy_new() -> pd.DataFrame:
     """Načíta ŠVP v štruktúrovanej podobe."""
-    if not sheet_id:
-        st.error("Chýba `sheet_id` v Streamlit secrets.")
-        st.stop()
-
-    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=661840704"
+    csv_url = f"SVPv5.csv"
 
     df = pd.read_csv(csv_url)
     df = df.rename(
@@ -145,9 +140,11 @@ def load_standardy_new() -> pd.DataFrame:
         df.loc[i_zmena, "definicia"] = "<span class='mark_update'>" + df.loc[i_zmena, "definicia"] + '</span>  ✏️'
 
     # pridaj tooltip
-    df["tooltip_html"] = df.apply(
-        lambda r: f'<span class="tooltip">{r["tooltip"]}<span class="tooltiptext">{r["tooltip_text"]}</span></span>',
-        axis=1
+
+    mask = df["tooltip"].notna() & df["tooltip"].ne("")
+    df.loc[mask, "tooltip_html"] = (
+            '<span class="tooltip">' + df.loc[mask, "tooltip"] +
+            '<span class="tooltiptext">' + df.loc[mask, "tooltip_text"] + '</span></span>'
     )
 
     df["definicia"] = df.apply(
@@ -164,7 +161,7 @@ def load_standardy_old() -> pd.DataFrame:
     """Načíta ŠVP v štruktúrovanej podobe."""
     # df = pd.read_csv("standardy_old.csv", sep='\t')
 
-    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=1762149550"
+    csv_url = f"SVPv0.csv"
     df = pd.read_csv(csv_url)
     df = df.rename(
         columns={
@@ -361,13 +358,6 @@ def tranform_to_export(df):
 
 
 # -----------------------------
-# Načítanie dát
-# -----------------------------
-
-if st.sidebar.button("Clear cache"):
-    st.cache_data.clear()
-
-# -----------------------------
 # Sidebar
 # -----------------------------
 
@@ -384,7 +374,7 @@ with st.sidebar:
 
     # Vyhľadávanie v štandardoch
     query = st.text_input('Vyhľadávanie vzdelávacích štandardov', '', key=1,
-                          placeholder='🔍 Vyhľadaj štandard, tému alebo kľúčové slovo ...')
+                          placeholder='🔍 Vyhľadaj štandard, pojem, kľúčové slovo ...')
 
     if query:
         st.sidebar.warning(f'Pre návrat na ŠVP vymažte text vo vyhľadávaní.')
@@ -446,7 +436,6 @@ with st.sidebar:
 # -----------------------------
 
 if svp == 'ŠVP 2023':
-
     PREDMETY_VYKONY_POD_CIELMI = {"Človek a príroda", "Človek a spoločnosť", "Informatika", "Matematika"}
 
     PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV = {
@@ -455,9 +444,7 @@ if svp == 'ŠVP 2023':
         "Zdravie a pohyb",
         *NABOZENSTVA,
     }
-
-if svp == "ŠVP 2023 (Dodatok č.5)":
-
+elif svp == "ŠVP 2023 (Dodatok č.5)":
     PREDMETY_VYKONY_POD_CIELMI = {"Človek a príroda", "Človek a spoločnosť"}
 
     PREDMETY_BEZ_DELENIA_OBSAH_STANDARDOV = {
@@ -468,6 +455,8 @@ if svp == "ŠVP 2023 (Dodatok č.5)":
         "Matematika",
         *NABOZENSTVA,
     }
+else:
+    st.stop()
 
 df = load_standardy(svp)
 
